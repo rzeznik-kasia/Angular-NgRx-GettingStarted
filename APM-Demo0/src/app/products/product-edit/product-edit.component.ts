@@ -7,9 +7,10 @@ import { GenericValidator } from '../../shared/generic-validator';
 import { NumberValidators } from '../../shared/number.validator';
 
 import { Store } from '@ngrx/store';
-import { getCurrentProduct, State } from '../state/product.reducer';
+import { getCurrentProduct, getCurrentProductId, State } from '../state/product.reducer';
 import * as ProductActions from '../state/product.actions';
 import { Observable } from 'rxjs';
+import { tap } from 'rxjs/operators';
 
 @Component({
   selector: 'pm-product-edit',
@@ -63,8 +64,8 @@ export class ProductEditComponent implements OnInit {
     });
 
     // Watch for changes to the currently selected product
-    this.store.select(getCurrentProduct).subscribe(
-      currentProduct => this.displayProduct(currentProduct)
+    this.product$ = this.store.select(getCurrentProduct).pipe(
+      tap((currentProduct: Product) => this.displayProduct(currentProduct))
     );
 
     // Watch for value changes for validation
@@ -132,14 +133,11 @@ export class ProductEditComponent implements OnInit {
 
         if (product.id === 0) {
           this.productService.createProduct(product).subscribe({
-            next: p => this.store.dispatch(ProductActions.setCurrentProduct({ product: p })),
+            next: p => this.store.dispatch(ProductActions.setCurrentProduct({ currentProductId: p.id })),
             error: err => this.errorMessage = err
           });
         } else {
-          this.productService.updateProduct(product).subscribe({
-            next: p => this.store.dispatch(ProductActions.setCurrentProduct({ product: p })),
-            error: err => this.errorMessage = err
-          });
+          this.store.dispatch(ProductActions.updateProduct({ product }));
         }
       }
     }
