@@ -1,34 +1,32 @@
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 
 import { Product } from '../product';
 import { GenericValidator } from '../../shared/generic-validator';
 import { NumberValidators } from '../../shared/number.validator';
 
-import { Store } from '@ngrx/store';
-import { getCurrentProduct, State } from '../state';
-import { Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
-import { ProductPageActions } from '../state/actions';
-
 @Component({
   selector: 'pm-product-edit',
-  templateUrl: './product-edit.component.html'
+  templateUrl: './product-edit.component.html',
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class ProductEditComponent implements OnInit {
+export class ProductEditComponent implements OnInit, OnChanges {
   pageTitle = 'Product Edit';
-  errorMessage = '';
+
+  @Input() selectedProduct: Product | null;
+  @Input() errorMessage: string;
+  @Output() delete = new EventEmitter<number>();
+  @Output() clearCurrent = new EventEmitter<void>();
+  @Output() create = new EventEmitter<Product>();
+  @Output() update = new EventEmitter<Product>();
+
   productForm: FormGroup;
 
-  product$: Observable<Product | null>;
-
-  // Use with the generic validation message class
-  displayMessage: { [key: string]: string } = {};
+  displayMessage: { [key: string]: string } = {};   // Use with the generic validation message class
   private validationMessages: { [key: string]: { [key: string]: string } };
   private genericValidator: GenericValidator;
 
   constructor(
-    private store: Store<State>,
     private fb: FormBuilder) {
 
     // Defines all of the validation messages for the form.
@@ -53,7 +51,6 @@ export class ProductEditComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    // Define the form group
     this.productForm = this.fb.group({
       productName: ['', [Validators.required, Validators.minLength(3), Validators.maxLength(50)]],
       productCode: ['', Validators.required],
@@ -61,37 +58,33 @@ export class ProductEditComponent implements OnInit {
       description: ''
     });
 
-    // Watch for changes to the currently selected product
-    this.product$ = this.store.select(getCurrentProduct).pipe(
-      tap((currentProduct: Product) => this.displayProduct(currentProduct))
-    );
-
-    // Watch for value changes for validation
     this.productForm.valueChanges.subscribe(
       () => this.displayMessage = this.genericValidator.processMessages(this.productForm)
     );
   }
 
-  // Also validate on blur
-  // Helpful if the user tabs through required fields
-  blur(): void {
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes.selectedProduct) {
+      const product = changes.selectedProduct.currentValue as Product;
+      this.displayProduct(product);
+    }
+  }
+
+  blur(): void { //  Also validate on blur- Helpful if the user tabs through required fields
     this.displayMessage = this.genericValidator.processMessages(this.productForm);
   }
 
   displayProduct(product: Product | null): void {
 
     if (product) {
-      // Reset the form back to pristine
       this.productForm.reset();
 
-      // Display the appropriate page title
       if (product.id === 0) {
         this.pageTitle = 'Add Product';
       } else {
         this.pageTitle = `Edit Product: ${product.productName}`;
       }
 
-      // Update the data on the form
       this.productForm.patchValue({
         productName: product.productName,
         productCode: product.productCode,
@@ -102,34 +95,27 @@ export class ProductEditComponent implements OnInit {
   }
 
   cancelEdit(product: Product): void {
-    // Redisplay the currently selected product
-    // replacing any edits made
     this.displayProduct(product);
   }
 
   deleteProduct(product: Product): void {
     if (product && product.id) {
       if (confirm(`Really delete the product: ${product.productName}?`)) {
-        this.store.dispatch(ProductPageActions.deleteProduct({ id: product.id }));
+        this.delete.emit(product.id);
       }
     } else {
-      // No need to delete, it was never saved
-      this.store.dispatch(ProductPageActions.clearCurrentProduct());
+      this.clearCurrent.emit();
     }
   }
 
   saveProduct(originalProduct: Product): void {
     if (this.productForm.valid) {
       if (this.productForm.dirty) {
-        // Copy over all of the original product properties
-        // Then copy over the values from the form
-        // This ensures values not on the form, such as the Id, are retained
-        const product = { ...originalProduct, ...this.productForm.value };
-
+        const product = { ...originalProduct, ...this.productForm.value }; // Copy over all of the original product properties; Then copy over the values from the form, This ensures values not on the form, such as the Id, are retained
         if (product.id === 0) {
-          this.store.dispatch(ProductPageActions.createProduct({ product }))
+          this.create.emit(product);
         } else {
-          this.store.dispatch(ProductPageActions.updateProduct({ product }));
+          this.update.emit(product);
         }
       }
     }
